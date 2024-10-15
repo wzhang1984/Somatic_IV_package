@@ -1,14 +1,14 @@
 # Somatic-IV analysis
   
-## Running environment  
-### Docker container
+__Running environment:__  
+__Docker container:__
 quay.io/jupyter/datascience-notebook:2024-05-27  
-### python packages
+__python packages:__
 networkx  
 openpyxl  
 adjustText  
 lxml  
-### R packages
+__R packages__
 timereg
   
 ## Viegnettes for running the Somatic-IV analysis
