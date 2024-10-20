@@ -9,11 +9,11 @@ for (gene in colnames(train)) {
     df = cbind(train[gene], metadata[rownames(train), ])
     df = df[complete.cases(df), ]
     colnames(df) = c('gene', colnames(metadata))
-    x = 'const(gene)'
-    for (confounder in tail(colnames(df), n=-4)) {
-        x = paste0(x, '+const(', confounder, ')')
+    g = 'const(gene)'
+    for (covariate in tail(colnames(df), n=-4)) {
+        g = paste0(g, '+const(', covariate, ')')
     }
-    out = aalen(as.formula(paste('Surv(time=time_delay_entry, time2=time_to_event, event=event)', '~', x)), df, n.sim=100)
+    out = aalen(as.formula(paste('Surv(time=time_delay_entry, time2=time_to_event, event=event)', '~', g)), df, n.sim=100)
     out = coef.aalen(out)
     rownames(out) = c(gene)
     i = i+1

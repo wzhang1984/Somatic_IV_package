@@ -18,7 +18,7 @@ from io import StringIO
 import networkx as nx
 
 class MR_Egger_model():
-    def __init__(self, Dir, disease, genes_in_network, IVs_in_network, PPR, gene2P0, Y, X0, X0_prime, metadata, 
+    def __init__(self, Dir, disease, genes_in_network, IVs_in_network, PPR, gene2P0, X, G0, G0_prime, metadata, 
                  delay_entry=False, LASSO_method='CV', covariates=[]):
         self.Dir = Dir
         self.disease = disease
@@ -26,9 +26,9 @@ class MR_Egger_model():
         self.IVs_in_network = IVs_in_network
         self.PPR = PPR
         self.gene2P0 = gene2P0
-        self.Y = Y
-        self.X0 = X0
-        self.X0_prime = X0_prime
+        self.X = X
+        self.G0 = G0
+        self.G0_prime = G0_prime
         self.metadata = metadata
         self.delay_entry = delay_entry
         self.LASSO_method = LASSO_method
@@ -50,7 +50,7 @@ class MR_Egger_model():
         # # Only keep interactions within 2 hops
         # mask_2hops = W.copy()*0
         # for gene in mask_2hops.index:
-        #     mask_2hops.loc[gene, mask_2hops.columns.isin(nx.single_source_shortest_path_length(self.G, gene, cutoff=2).keys())]=1
+        #     mask_2hops.loc[gene, mask_2hops.columns.isin(nx.single_source_shortest_path_length(self.Graph, gene, cutoff=2).keys())]=1
         # W = np.multiply(W, mask_2hops)
 
         W = W.dropna()
@@ -133,24 +133,24 @@ class MR_Egger_model():
         scores = []
         for gene in self.W.index:
             w = self.W.loc[gene]
-            X =  self.X0 * w
-            X_prime = self.X0_prime * w
+            G =  self.G0 * w
+            G_prime = self.G0_prime * w
 
-            X = pd.concat([X, self.metadata.loc[:, self.covariates]], axis=1, join='inner')
-            X_prime = pd.concat([X_prime, self.metadata.loc[:, self.covariates]], axis=1, join='inner')
+            G = pd.concat([G, self.metadata.loc[:, self.covariates]], axis=1, join='inner')
+            G_prime = pd.concat([G_prime, self.metadata.loc[:, self.covariates]], axis=1, join='inner')
             if len(self.covariates) != 0:
-                X_prime.loc[:, self.covariates] = 0
-            y = self.Y.loc[X.index, gene]
+                G_prime.loc[:, self.covariates] = 0
+            x = self.X.loc[G.index, gene]
 
             if self.LASSO_method == 'CV':
                 regr = LassoCV(cv=5, random_state=0, n_jobs=5) # CV
             elif self.LASSO_method == 'BIC':
                 regr = LassoLarsIC(criterion='bic') # BIC
-            regr.fit(X, y)
+            regr.fit(G, x)
 
             # Check F-statistic 
-            score = regr.score(X_prime.loc[y.index], y)
-            n = len(y)
+            score = regr.score(G_prime.loc[x.index], x)
+            n = len(x)
             if len(self.covariates) == 0:
                 k = sum(regr.coef_!=0)
             else:
@@ -160,7 +160,7 @@ class MR_Egger_model():
             models.append(list(regr.coef_))
             models[-1].append(regr.intercept_)
             
-            preds.append(regr.predict(X_prime))
+            preds.append(regr.predict(G_prime))
 
             if self.LASSO_method == 'CV':
                 MSE = regr.mse_path_.mean(1).min() # CV
@@ -170,13 +170,13 @@ class MR_Egger_model():
 
         models = pd.DataFrame(models)
         models.index = self.W.index
-        columns = list(X.columns)
+        columns = list(G.columns)
         columns.append('intercept')
         models.columns = columns
         
         preds = pd.DataFrame(preds)
         preds.index = self.W.index
-        preds.columns = X_prime.index
+        preds.columns = G_prime.index
 
         scores = pd.DataFrame(scores)
         scores = scores.set_index(0)
@@ -189,11 +189,11 @@ class MR_Egger_model():
     
     # 2. BetaXG: Pr-IV Associations
     def run_lm_XG(self, Regulator):
-        x = self.Y.loc[:, [Regulator]].dropna()
+        x = self.X.loc[:, [Regulator]].dropna()
         # IV selection by LassoCV
         IV2coef_Lasso = self.models.loc[Regulator].drop(['intercept']+self.covariates)
         IVs = IV2coef_Lasso.loc[IV2coef_Lasso!=0].index
-        G0 = self.X0.loc[x.index, IVs]
+        G0 = self.G0.loc[x.index, IVs]
         lm_XG = self.run_OLS(x, G0)
         lm_XG['Regulator'] = Regulator
         return lm_XG
@@ -255,7 +255,7 @@ class MR_Egger_model():
             
             print('# Build input data for the Aalen model')
             
-            self.train = self.X0_prime.copy()
+            self.train = self.G0_prime.copy()
             # Option to include factors (e.g. age, sex, race) in the metadata
             if self.delay_entry:
                 self.metadata_lite = self.metadata.loc[:, ['event', 'time_to_event', 'time_delay_entry']+self.covariates] # TEMPUS OS
